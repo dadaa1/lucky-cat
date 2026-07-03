@@ -1,6 +1,6 @@
 # 演示地址
 
-https://suziwen.github.io/lucky-cat/
+https://dadaa1.github.io/lucky-cat/
 
 # 安装步骤
 
