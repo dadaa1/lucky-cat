@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <title>自建采集接收站</title>
-    <!-- 1. 引入 jQuery（插件自动化点击和插入节点需要） -->
-    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
-    <!-- 2. 引入 RequireJS（核心环境伪装） -->
-    <script src="https://cdn.bootcdn.net/ajax/libs/requirejs/2.3.6/require.js"></script>
+    <!-- 1. 引入 jQuery -->
+    <script src="https://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.6.4.min.js"></script>
 
+    <!-- 2. 引入更加稳定的 RequireJS 官方 CDN，并移除导致 404 的旧链接 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js"></script>
     <style>
       body {
         font-family: sans-serif;
@@ -37,7 +37,6 @@
     <h2>🤖 大山的数据接收容器</h2>
     <p>当前页面正在等待插件隐藏的 iframe 建立连接...</p>
 
-    <!-- 插件代码里有一行 $('#main').append(e)，必须提供这个容器 -->
     <div id="main">
       <h3>系统状态：准备就绪</h3>
       <div class="log-box" id="log">等待数据中...</div>
@@ -51,103 +50,108 @@
         box.innerText += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
       }
 
-      // ==========================================
-      // 🛠️ 第一步：用 RequireJS 伪装网站核心模块
-      // ==========================================
-      define('application', [], function () {
-        log("插件成功调用了 requirejs('./application')！正在下发伪装对象...");
-        return {
-          isFirstUse: function () {
-            return true;
-          }, // 强行触发插件内部的自动下载和悬浮窗逻辑
-          hideTour: function () {
-            log('执行了：hideTour()');
-          },
-          getApplicationProfileModel: function () {
-            return {
-              set: function (obj) {
-                log('修改设置: ' + JSON.stringify(obj));
-              },
-            };
-          },
-          homeView: {
-            previewView: {
-              close: function (flag) {
-                log('执行了：close(' + flag + ')');
+      // 🛡️ 核心修复：把所有依赖 requirejs 的代码，包裹在一个安全检查定时器里
+      // 确保 requirejs 变量在内存中完全存在后再执行伪装
+      function initMocks() {
+        if (typeof requirejs === 'undefined' || typeof define === 'undefined') {
+          log('⚠️ RequireJS 仍在加载中，正在重试...');
+          setTimeout(initMocks, 50); // 每 50 毫秒检查一次
+          return;
+        }
+
+        log('✅ RequireJS 环境检测成功，开始注入伪装模块...');
+
+        // ==========================================
+        // 🛠️ 第一步：安全伪装网站核心模块
+        // ==========================================
+        define('application', [], function () {
+          log("插件成功调用了 requirejs('./application')！正在下发伪装对象...");
+          return {
+            isFirstUse: function () {
+              return true;
+            },
+            hideTour: function () {
+              log('执行了：hideTour()');
+            },
+            getApplicationProfileModel: function () {
+              return {
+                set: function (obj) {
+                  log('修改设置: ' + JSON.stringify(obj));
+                },
+              };
+            },
+            homeView: {
+              previewView: {
+                close: function (flag) {
+                  log('执行了：close(' + flag + ')');
+                },
               },
             },
-          },
-        };
-      });
+          };
+        });
 
-      // ==========================================
-      // ⚡ 第二步：监听并应答插件的消息（postMessage）
-      // ==========================================
-      window.addEventListener('message', function (event) {
-        // 排除自身发出的消息
-        if (event.source === window) return;
+        // ==========================================
+        // ⚡ 第二步：开始监听并应答插件的消息
+        // ==========================================
+        window.addEventListener('message', function (event) {
+          if (event.source === window) return;
 
-        const message = event.data;
-        log(`拦截到跨域消息类型: ${message.type}`);
+          const message = event.data;
+          log(`拦截到跨域消息类型: ${message.type}`);
 
-        // 1. 当插件的隐藏 iframe 刚加载时，它会在外层监听 loaded
-        // 由于我们在 iframe 内部，我们需要看准时机向外层（parent）发送握手信号
-        if (message.type === undefined && window.parent !== window) {
-          // 页面一加载，主动向外层汇报：“我准备好了，把要采集的 ID 发给我”
-          const urlParams = new URLSearchParams(window.location.search);
-          const uniqueId = urlParams.get('uniqueId'); // 拿到插件带过来的时间戳 ID
+          // 1. 自动握手阶段
+          if (message.type === undefined && window.parent !== window) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const uniqueId = urlParams.get('uniqueId');
 
-          if (uniqueId) {
-            log(`向插件外层发送 loaded 握手信号，唯一 ID: ${uniqueId}`);
-            window.parent.postMessage(
+            if (uniqueId) {
+              log(`向插件外层发送 loaded 握手信号，唯一 ID: ${uniqueId}`);
+              window.parent.postMessage(
+                {
+                  type: 'loaded',
+                  uniqueId: parseInt(uniqueId),
+                },
+                '*'
+              );
+            }
+          }
+
+          // 2. 响应 'getFiles' 指令
+          if (message.type === 'getFiles') {
+            const uniqueId = message.uniqueId;
+            const fileIds = message.data.fileIds;
+            log(`🎉 抓到了！需要采集的知乎问答 ID 列表: ${JSON.stringify(fileIds)}`);
+
+            // 模拟文件数据喂回给插件
+            const mockData = [
               {
-                type: 'loaded',
-                uniqueId: parseInt(uniqueId),
+                filename: 'zhihu_answer_' + fileIds[0] + '.txt',
+                data: new Blob([`自建网页成功拦截，ID为: ${fileIds[0]}`], { type: 'text/plain' }),
+                meta: { source: 'Dashan_Interceptor', originalIds: fileIds },
               },
-              '*'
+            ];
+
+            event.source.postMessage(
+              {
+                type: 'getFilesResult',
+                uniqueId: uniqueId,
+                data: mockData,
+              },
+              event.origin
             );
           }
-        }
+        });
 
-        // 2. 响应插件发过来的 'getFiles' 指令
-        if (message.type === 'getFiles') {
-          const uniqueId = message.uniqueId;
-          const fileIds = message.data.fileIds;
-          log(`收到采集指令！需要采集的文件 ID 列表: ${JSON.stringify(fileIds)}`);
-
-          // 🌟 【你可以在这里搞事情】 🌟
-          // 已经拿到了知乎回答的 ID 列表 (fileIds)，你可以在这里发起 ajax 请求你自己的后台，
-          // 或者直接在前端生成一个虚拟的文件喂回给插件，让它以为成功了。
-
-          // 模拟一个文件数据回传给插件（触发插件的 getFilesResult 逻辑）
-          log('正在将模拟的文件数据打包通过 postMessage 送回插件...');
-          const mockData = [
-            {
-              filename: 'zhihu_answer_' + fileIds[0] + '.txt',
-              data: new Blob([`这是自建网页拦截并生成的知乎回答数据，ID为: ${fileIds[0]}`], { type: 'text/plain' }),
-              meta: { source: 'Dashan_Interceptor', originalIds: fileIds },
-            },
-          ];
-
-          event.source.postMessage(
-            {
-              type: 'getFilesResult',
-              uniqueId: uniqueId,
-              data: mockData,
-            },
-            event.origin
-          );
-        }
-      });
-
-      // 页面加载完成后立即尝试初次握手
-      setTimeout(function () {
+        // 主动触发初次握手
         const urlParams = new URLSearchParams(window.location.search);
         const uniqueId = urlParams.get('uniqueId');
         if (uniqueId && window.parent !== window) {
           window.parent.postMessage({ type: 'loaded', uniqueId: parseInt(uniqueId) }, '*');
         }
-      }, 100);
+      }
+
+      // 启动安全检查流
+      initMocks();
     </script>
   </body>
 </html>
