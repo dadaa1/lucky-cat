@@ -1,211 +1,153 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <title>小书匠</title>
-  <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="小书匠是一款本地优先，去中心化，分布式，支持选择性同步的全平台覆盖笔记软件">
-  <meta name="author" content="booksmith">
-	<meta name="keywords" content="书匠,小书匠,markdown,evernote,github,dropbox,presentation,powerpoint,编辑器,知识管理系统">
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link href="css/preview/code/default.css?v=8.15.5" rel="stylesheet">
-<link href="css/semantic.min.css?v=8.15.5" rel="stylesheet">
-<style id="xsj-default-global-style">
-:root {
-  --base00: #ffffff;
-  --base01: #f5f5f5;
-  --base02: #c8c8fa;
-  --base03: #969896;
-  --base04: #353535;
-  --base05: #333333;
-  --base06: #1f1f1f;
-  --base07: #111111;
-  --base08: #ed6a43;
-  --base09: #0086b3;
-  --base0A: #795da3;
-  --base0B: #183691;
-  --base0C: #183691;
-  --base0D: #795da3;
-  --base0E: #a71d5d;
-  --base0F: #a69900;
-}
-@font-face {
-  font-family: 'subwebfontxiaoshujiang';
-  src:url('./fonts/lucky_cat/char/icomoon.eot');
-  src:url('./fonts/lucky_cat/char/icomoon.eot?#iefixoo1ur0') format('embedded-opentype'),
-    url('./fonts/lucky_cat/char/icomoon.ttf') format('truetype'),
-    url('./fonts/lucky_cat/char/icomoon.woff') format('woff'),
-    url('./fonts/lucky_cat/char/icomoon.svg#icomoon') format('svg');
-  font-weight: normal;
-  font-style: normal;
-}
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>自建采集接收站</title>
+    <!-- 1. 引入 jQuery（插件自动化点击和插入节点需要） -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+    <!-- 2. 引入 RequireJS（核心环境伪装） -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/requirejs/2.3.6/require.js"></script>
 
-@font-face {
-  font-family: 'subicomoon';
-  src:url('./fonts/lucky_cat/logo/icomoon.eot');
-  src:url('./fonts/lucky_cat/logo/icomoon.eot?#iefixoo1ur0') format('embedded-opentype'),
-    url('./fonts/lucky_cat/logo/icomoon.ttf') format('truetype'),
-    url('./fonts/lucky_cat/logo/icomoon.woff') format('woff'),
-    url('./fonts/lucky_cat/logo/icomoon.svg#icomoon') format('svg');
-  font-weight: normal;
-  font-style: normal;
-}
-
-.mini_web i.icon.xiaoshujiang:before: {
-    font-family: subicomoon;
-    content: '\e900';
-  }
-.mini_web i.icon.xiaoshujiang.circle.outline:before {
-    font-family: subicomoon;
-    content: '\e901';
-}
-.mini_web .main_button i.icon.xiaoshujiang{
-    font-weight: bold;
-    transform: scale(2);
-}
-.mini_web .main_button:hover i.icon.xiaoshujiang.circle.outline:before {
-    font-weight: normal;
-    content: '\e900';
-}
-
-.mini_web.editor_zen_mode .editorPanel:after,.mini_web.preview_zen_mode .preview_center_panel:after {
-  font-family: subicomoon;
-  content: '\e901';
-
-</style>
-
-<link href="css/font-awesome.min.css?v=8.15.5" rel="stylesheet">
-<link href="css/font-awesome-social.min.css?v=8.15.5" rel="stylesheet">
-<link href="css/codemirror.css?v=8.15.5" rel="stylesheet">
-<link href="css/app.css?v=8.15.5" rel="stylesheet">
-<style type="text/css" id="custom-body-font-style">
-</style>
-
-<style type="text/css">
-.shine_xsj_logo {
-  font-family: webfontxiaoshujiang,subwebfontxiaoshujiang;
-}
-#loader-wrapper, .pusher_background{
-  background-color: var(--base09);
-}
-</style>
-
-  <link rel="shortcut icon" href="ico/favicon.ico">
-
-
-</head>
-
-<body onload="initWeb();" class="mini_web github_page_web">
-<div id="loader-wrapper">
-    <div id="loader"></div>
-</div>
-    <div class="ui active dimmer application_dimmer" style="">
-        <div class="content">
-          <div class="ui inverted header">
-            <span style="font-family:webfontxiaoshujiang,subwebfontxiaoshujiang;font-size: 3rem;"><div class="shine-wrapper"><span class="shine-word"><span class="shine-letter" style="text-shadow: rgba(0, 0,
-                      0, 0.4) 0px 0px 0px, rgba(0, 0, 0, 0.4) -0.299024px -0.195789px 0px, rgba(0, 0, 0, 0.4) -0.736283px
-                      -0.48209px 1px, rgba(0, 0, 0, 0.4) -1.24728px -0.81667px 1px, rgba(0, 0, 0, 0.396078) -1.81294px
-                      -1.18704px 1px, rgba(0, 0, 0, 0.392157) -2.42307px -1.58654px 1px, rgba(0, 0, 0, 0.388235) -3.07116px
-                      -2.01088px 2px, rgba(0, 0, 0, 0.376471) -3.75261px -2.45706px 2px, rgba(0, 0, 0, 0.360784) -4.46398px
-                      -2.92285px 2px, rgba(0, 0, 0, 0.333333) -5.2026px -3.40647px 3px, rgba(0, 0, 0, 0.298039) -5.96631px
-                      -3.90651px 3px, rgba(0, 0, 0, 0.25098) -6.7533px -4.4218px 3px, rgba(0, 0, 0, 0.184314) -7.56208px
-                      -4.95136px 3px, rgba(0, 0, 0, 0.101961) -8.39135px -5.49434px 4px;">小</span></span><span class="shine-word"><span class="shine-letter" style="text-shadow: rgba(0, 0, 0, 0.4) 0px 0px 0px, rgba(0, 0,
-                    0, 0.4) 0px -0.195789px 0px, rgba(0, 0, 0, 0.4) 0px -0.48209px 0px, rgba(0, 0, 0, 0.4) 0px -0.81667px 1px,
-                    rgba(0, 0, 0, 0.396078) 0px -1.18704px 1px, rgba(0, 0, 0, 0.392157) 0px -1.58654px 1px, rgba(0, 0, 0,
-                    0.388235) 0px -2.01088px 1px, rgba(0, 0, 0, 0.376471) 0px -2.45706px 1px, rgba(0, 0, 0, 0.360784) 0px
-                    -2.92285px 1px, rgba(0, 0, 0, 0.333333) 0px -3.40647px 2px, rgba(0, 0, 0, 0.298039) 0px -3.90651px 2px,
-                    rgba(0, 0, 0, 0.25098) 0px -4.4218px 2px, rgba(0, 0, 0, 0.184314) 0px -4.95136px 2px, rgba(0, 0, 0,
-                    0.101961) 0px -5.49434px 2px;">书</span></span><span class="shine-word"><span class="shine-letter" style="text-shadow: rgba(0, 0, 0, 0.4) 0px 0px 0px, rgba(0, 0, 0, 0.4) 0.299024px -0.195789px 0px, rgba(0, 0,
-                  0, 0.4) 0.736283px -0.48209px 1px, rgba(0, 0, 0, 0.4) 1.24728px -0.81667px 1px, rgba(0, 0, 0, 0.396078)
-                  1.81294px -1.18704px 1px, rgba(0, 0, 0, 0.392157) 2.42307px -1.58654px 1px, rgba(0, 0, 0, 0.388235) 3.07116px
-                  -2.01088px 2px, rgba(0, 0, 0, 0.376471) 3.75261px -2.45706px 2px, rgba(0, 0, 0, 0.360784) 4.46398px -2.92285px
-                  2px, rgba(0, 0, 0, 0.333333) 5.2026px -3.40647px 3px, rgba(0, 0, 0, 0.298039) 5.96631px -3.90651px 3px,
-                  rgba(0, 0, 0, 0.25098) 6.7533px -4.4218px 3px, rgba(0, 0, 0, 0.184314) 7.56208px -4.95136px 3px, rgba(0, 0, 0,
-                  0.101961) 8.39135px -5.49434px 4px;">匠</span></span><div class="shine-mask" style="
-            /* display: none; */
-        "><span class="shine-word"><span class="shine-letter">小</span></span><span class="shine-word"><span
-            class="shine-letter">书</span></span><span class="shine-word"><span
-                                                        class="shine-letter">匠</span></span><span
-                                                        style="font-size:40%;">招财猫版</span></div><span
-                                                        style="font-size: 40%;">招财猫版</span></div></span>
-            <div class="loader_version sub header">8.15.5</div>
-            
-              <div class="loader_message sub header"></div>
-            
-          </div>
-        </div>
-    </div>
-  <noscript>
-        
-    <p>由 于 您的浏览器没有开始javascript的支持，本系统将无法使用</p>
-  </noscript>
-    <div class="client_dragable_zone client_title_bar"></div>
-    
-
-<script src="js/jquery-1.11.2.min.js?v=8.15.5"></script>
-<script src="js/jquery-ui-1.10.4.custom.min.js?v=8.15.5"></script>
-<script src="js/semantic.min.js?v=8.15.5"></script>
-
-<script src="js/modules/index.js?v=8.15.5" type="module"></script>
-<script src="js/vendor-base.js?v=8.15.5"></script>
-<script src="js/codemirror.js?v=8.15.5" id="codemirror_core_js"></script>
-<script src="js/ace/ace-base.js?v=8.15.5"></script>
-<script type="text/javascript">
-APP_VERSION = "8.15.5";
-DATABASE_VERSION = "31";
-ENV = "production";
-IDIOM = "";
-MINI_WEB = true;
-DOCKER_VERSION = true;
-MAC_STORE_WEB = false;
-GITHUB_PAGE_WEB = true;
-</script>
-<script src="js/app.js?v=8.15.5"></script>
-<script type="text/javascript">
-  if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').then(function(reg) {
-        // registration worked
-        console.log('Registration succeeded. Scope is ' + reg.scope);
-        afterServiceWorkInitedFn(reg);
-      }).catch(function(error) {
-        // registration failed
-        console.log('Registration failed with ' + error);
-      });
-  }
-
-      function initWeb() {
-        var utils = requirejs('./lib/utils');
-        var canSkip = localStorage.getItem('IKnowMobileVersion')
-        if (canSkip === '1') {
-          return requirejs('initialize');
-        }
-        if (utils.isMobileDevice()) {
-          var $message = $('.loader_message.sub.header');
-          $message.html(`
-              <div>欢迎使用小书匠编辑器<br/> 小书匠推出了手机版(android/ios)编辑器 <a class="ui button positive mini"
-              style="margin:1em;" 
-                  href="http://soft.xiaoshujiang.com/download/">有影笔记</a> ，欢迎下载使用，或者继续访问 <a class="ui
-                  mini button primary" style="margin:1em;"
-                  href="javascript:IKnow();">web
-                  版本小书匠</a></div>
-          `);
-        } else {
-          requirejs('initialize');
-        }
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 40px;
+        background: #f5f5f5;
       }
-     function IKnow () {
-       localStorage.setItem('IKnowMobileVersion', '1');
-       requirejs('initialize');
-     }
+      #main {
+        border: 2px dashed #ccc;
+        min-height: 200px;
+        padding: 20px;
+        background: #fff;
+        border-radius: 8px;
+      }
+      .log-box {
+        margin-top: 20px;
+        background: #1e1e1e;
+        color: #00ff00;
+        padding: 15px;
+        border-radius: 5px;
+        font-family: monospace;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>🤖 大山的数据接收容器</h2>
+    <p>当前页面正在等待插件隐藏的 iframe 建立连接...</p>
 
-</script>
+    <!-- 插件代码里有一行 $('#main').append(e)，必须提供这个容器 -->
+    <div id="main">
+      <h3>系统状态：准备就绪</h3>
+      <div class="log-box" id="log">等待数据中...</div>
+    </div>
 
+    <script>
+      // 日志打印小工具
+      function log(msg) {
+        const box = document.getElementById('log');
+        if (box.innerText === '等待数据中...') box.innerText = '';
+        box.innerText += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+      }
 
-<iframe src="http://markdown.xiaoshujiang.com/tongji.html?platform=luckyCat" style="position:absolute" frameborder="0" height=0 width=0></iframe>
+      // ==========================================
+      // 🛠️ 第一步：用 RequireJS 伪装网站核心模块
+      // ==========================================
+      define('application', [], function () {
+        log("插件成功调用了 requirejs('./application')！正在下发伪装对象...");
+        return {
+          isFirstUse: function () {
+            return true;
+          }, // 强行触发插件内部的自动下载和悬浮窗逻辑
+          hideTour: function () {
+            log('执行了：hideTour()');
+          },
+          getApplicationProfileModel: function () {
+            return {
+              set: function (obj) {
+                log('修改设置: ' + JSON.stringify(obj));
+              },
+            };
+          },
+          homeView: {
+            previewView: {
+              close: function (flag) {
+                log('执行了：close(' + flag + ')');
+              },
+            },
+          },
+        };
+      });
 
+      // ==========================================
+      // ⚡ 第二步：监听并应答插件的消息（postMessage）
+      // ==========================================
+      window.addEventListener('message', function (event) {
+        // 排除自身发出的消息
+        if (event.source === window) return;
 
-<div class='pusher_background'></div>
-<div class="pwa_dragable_zone pwa_title_bar"></div>
-</body>
+        const message = event.data;
+        log(`拦截到跨域消息类型: ${message.type}`);
+
+        // 1. 当插件的隐藏 iframe 刚加载时，它会在外层监听 loaded
+        // 由于我们在 iframe 内部，我们需要看准时机向外层（parent）发送握手信号
+        if (message.type === undefined && window.parent !== window) {
+          // 页面一加载，主动向外层汇报：“我准备好了，把要采集的 ID 发给我”
+          const urlParams = new URLSearchParams(window.location.search);
+          const uniqueId = urlParams.get('uniqueId'); // 拿到插件带过来的时间戳 ID
+
+          if (uniqueId) {
+            log(`向插件外层发送 loaded 握手信号，唯一 ID: ${uniqueId}`);
+            window.parent.postMessage(
+              {
+                type: 'loaded',
+                uniqueId: parseInt(uniqueId),
+              },
+              '*'
+            );
+          }
+        }
+
+        // 2. 响应插件发过来的 'getFiles' 指令
+        if (message.type === 'getFiles') {
+          const uniqueId = message.uniqueId;
+          const fileIds = message.data.fileIds;
+          log(`收到采集指令！需要采集的文件 ID 列表: ${JSON.stringify(fileIds)}`);
+
+          // 🌟 【你可以在这里搞事情】 🌟
+          // 已经拿到了知乎回答的 ID 列表 (fileIds)，你可以在这里发起 ajax 请求你自己的后台，
+          // 或者直接在前端生成一个虚拟的文件喂回给插件，让它以为成功了。
+
+          // 模拟一个文件数据回传给插件（触发插件的 getFilesResult 逻辑）
+          log('正在将模拟的文件数据打包通过 postMessage 送回插件...');
+          const mockData = [
+            {
+              filename: 'zhihu_answer_' + fileIds[0] + '.txt',
+              data: new Blob([`这是自建网页拦截并生成的知乎回答数据，ID为: ${fileIds[0]}`], { type: 'text/plain' }),
+              meta: { source: 'Dashan_Interceptor', originalIds: fileIds },
+            },
+          ];
+
+          event.source.postMessage(
+            {
+              type: 'getFilesResult',
+              uniqueId: uniqueId,
+              data: mockData,
+            },
+            event.origin
+          );
+        }
+      });
+
+      // 页面加载完成后立即尝试初次握手
+      setTimeout(function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        const uniqueId = urlParams.get('uniqueId');
+        if (uniqueId && window.parent !== window) {
+          window.parent.postMessage({ type: 'loaded', uniqueId: parseInt(uniqueId) }, '*');
+        }
+      }, 100);
+    </script>
+  </body>
 </html>
