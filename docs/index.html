@@ -2,110 +2,154 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>自建采集接收站</title>
-    <!-- 1. 引入 jQuery -->
-    <script src="https://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.6.4.min.js"></script>
 
-    <!-- 2. 引入更加稳定的 RequireJS 官方 CDN，并移除导致 404 的旧链接 -->
+    <!-- 1. 引入 100% 正确的 RequireJS 官方 CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js"></script>
+
+    <!-- 2. 引入稳定的 jQuery 官方 CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+
     <style>
       body {
-        font-family: sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         padding: 40px;
         background: #f5f5f5;
+        color: #333;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
       }
       #main {
-        border: 2px dashed #ccc;
-        min-height: 200px;
-        padding: 20px;
+        border: 2px dashed #0076ff;
+        min-height: 180px;
+        padding: 25px;
         background: #fff;
-        border-radius: 8px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
       }
       .log-box {
         margin-top: 20px;
         background: #1e1e1e;
-        color: #00ff00;
+        color: #39ff14;
         padding: 15px;
-        border-radius: 5px;
-        font-family: monospace;
-        max-height: 300px;
+        border-radius: 8px;
+        font-family: 'Fira Code', Consolas, monospace;
+        font-size: 14px;
+        line-height: 1.5;
+        max-height: 400px;
         overflow-y: auto;
+        box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+      }
+      .status-tag {
+        display: inline-block;
+        background: #e3f2fd;
+        color: #0d47a1;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: bold;
       }
     </style>
   </head>
   <body>
-    <h2>🤖 大山的数据接收容器</h2>
-    <p>当前页面正在等待插件隐藏的 iframe 建立连接...</p>
+    <div class="container">
+      <h2>🤖 数据接收服务容器</h2>
+      <p>当前页面作为一个拦截桩（Mock），正在等待插件隐藏的 iframe 握手信号...</p>
 
-    <div id="main">
-      <h3>系统状态：准备就绪</h3>
-      <div class="log-box" id="log">等待数据中...</div>
+      <!-- 核心容器：满足插件逻辑里的 $('#main').append(e) 节点插入需求 -->
+      <div id="main">
+        <div>
+          系统状态：
+          <span class="status-tag" id="status">正在初始化环境...</span>
+        </div>
+        <div class="log-box" id="log">等待数据中...</div>
+      </div>
     </div>
 
     <script>
-      // 日志打印小工具
-      function log(msg) {
+      // 1. 日志打印小工具
+      function log(msg, isSuccess = false) {
         const box = document.getElementById('log');
+        const statusTag = document.getElementById('status');
         if (box.innerText === '等待数据中...') box.innerText = '';
-        box.innerText += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+
+        const prefix = isSuccess ? '🎉 ' : 'ℹ️ ';
+        box.innerText += `[${new Date().toLocaleTimeString()}] ${prefix}${msg}\n`;
+        box.scrollTop = box.scrollHeight; // 滚动条自动滚到底
+
+        if (isSuccess) {
+          statusTag.innerText = '成功拦截到数据！';
+          statusTag.style.background = '#e8f5e9';
+          statusTag.style.color = '#2e7d32';
+        }
       }
 
-      // 🛡️ 核心修复：把所有依赖 requirejs 的代码，包裹在一个安全检查定时器里
-      // 确保 requirejs 变量在内存中完全存在后再执行伪装
-      function initMocks() {
-        if (typeof requirejs === 'undefined' || typeof define === 'undefined') {
-          log('⚠️ RequireJS 仍在加载中，正在重试...');
-          setTimeout(initMocks, 50); // 每 50 毫秒检查一次
-          return;
-        }
+      // 2. 核心拦截桩配置：伪装 RequireJS 模块环境
+      function patchRequireJS() {
+        // 同时检查全局的 define 或 requirejs 是否加载完毕
+        if (typeof define !== 'undefined' || typeof requirejs !== 'undefined') {
+          const def = typeof define !== 'undefined' ? define : requirejs.define;
 
-        log('✅ RequireJS 环境检测成功，开始注入伪装模块...');
+          document.getElementById('status').innerText = '等待插件连接...';
+          log('RequireJS 环境检测成功，本地挂载 application 拦截桩...');
 
-        // ==========================================
-        // 🛠️ 第一步：安全伪装网站核心模块
-        // ==========================================
-        define('application', [], function () {
-          log("插件成功调用了 requirejs('./application')！正在下发伪装对象...");
-          return {
-            isFirstUse: function () {
-              return true;
-            },
-            hideTour: function () {
-              log('执行了：hideTour()');
-            },
-            getApplicationProfileModel: function () {
-              return {
-                set: function (obj) {
-                  log('修改设置: ' + JSON.stringify(obj));
-                },
-              };
-            },
-            homeView: {
-              previewView: {
-                close: function (flag) {
-                  log('执行了：close(' + flag + ')');
+          // 抢先在本地注册 'application' 模块，彻底阻止其走网络请求产生 404
+          def('application', [], function () {
+            log("插件成功触发了 requirejs('./application')！正在下发伪装对象...");
+            return {
+              isFirstUse: function () {
+                return true;
+              }, // 强行让插件走自动打包逻辑
+              hideTour: function () {
+                log('调用了防干扰组件: hideTour()');
+              },
+              getApplicationProfileModel: function () {
+                return {
+                  set: function (obj) {
+                    log('修改设置注入: ' + JSON.stringify(obj));
+                  },
+                };
+              },
+              homeView: {
+                previewView: {
+                  close: function (flag) {
+                    log('调用了视图控制: close(' + flag + ')');
+                  },
                 },
               },
-            },
-          };
-        });
+            };
+          });
 
-        // ==========================================
-        // ⚡ 第二步：开始监听并应答插件的消息
-        // ==========================================
+          // 启动消息事件监听
+          startMessageListener();
+        } else {
+          // 如果 CDN 还没加载完，30ms 后继续自旋检查
+          setTimeout(patchRequireJS, 30);
+        }
+      }
+
+      // 3. 跨域 postMessage 通信核心逻辑
+      function startMessageListener() {
         window.addEventListener('message', function (event) {
+          // 排除自身网页发出的内部消息
           if (event.source === window) return;
 
           const message = event.data;
-          log(`拦截到跨域消息类型: ${message.type}`);
+          if (!message) return;
 
-          // 1. 自动握手阶段
+          log(`捕捉到跨域消息，类型(type): ${message.type || 'undefined'}`);
+
+          // 【步骤 A】：建立首次握手应答
+          // 如果插件刚刚创建 iframe 进来，它处于等待状态，我们要主动往父窗口（parent）发 loaded
           if (message.type === undefined && window.parent !== window) {
             const urlParams = new URLSearchParams(window.location.search);
-            const uniqueId = urlParams.get('uniqueId');
+            const uniqueId = urlParams.get('uniqueId'); // 提取插件传过来的时间戳
 
             if (uniqueId) {
-              log(`向插件外层发送 loaded 握手信号，唯一 ID: ${uniqueId}`);
+              log(`正在向插件外层回传 loaded 握手信号，流水号(uniqueId): ${uniqueId}`);
               window.parent.postMessage(
                 {
                   type: 'loaded',
@@ -116,17 +160,23 @@
             }
           }
 
-          // 2. 响应 'getFiles' 指令
+          // 【步骤 B】：拦截核心采集数据（getFiles 指令）
           if (message.type === 'getFiles') {
             const uniqueId = message.uniqueId;
-            const fileIds = message.data.fileIds;
-            log(`🎉 抓到了！需要采集的知乎问答 ID 列表: ${JSON.stringify(fileIds)}`);
+            const fileIds = message.data.fileIds; // 👈 这里就是你要的知乎回答 ID 数组！
 
-            // 模拟文件数据喂回给插件
-            const mockData = [
+            log(`截获知乎问答 ID 列表: ${JSON.stringify(fileIds)}`, true);
+
+            // 💡 这里你可以为所欲为：
+            // 可以通过 fetch() 传给你自己的后台或者云端存储
+            // Example: fetch('http://localhost:8080/api', { method: 'POST', body: JSON.stringify(fileIds) })
+
+            // 【步骤 C】：伪造文件流喂回给插件，完美闭环，让插件自嗨去
+            log('正在伪造二进制问答文件流送回插件，触发其后续清理流程...');
+            const mockFilePack = [
               {
-                filename: 'zhihu_answer_' + fileIds[0] + '.txt',
-                data: new Blob([`自建网页成功拦截，ID为: ${fileIds[0]}`], { type: 'text/plain' }),
+                filename: `zhihu_answer_intercepted_${fileIds[0]}.txt`,
+                data: new Blob([`自建网页成功截获，此问答ID为: ${fileIds[0]}`], { type: 'text/plain' }),
                 meta: { source: 'Dashan_Interceptor', originalIds: fileIds },
               },
             ];
@@ -135,14 +185,14 @@
               {
                 type: 'getFilesResult',
                 uniqueId: uniqueId,
-                data: mockData,
+                data: mockFilePack,
               },
               event.origin
             );
           }
         });
 
-        // 主动触发初次握手
+        // 兜底保障：如果页面加载过慢错过了最初的握手，进来后立刻尝试补发一次
         const urlParams = new URLSearchParams(window.location.search);
         const uniqueId = urlParams.get('uniqueId');
         if (uniqueId && window.parent !== window) {
@@ -150,8 +200,8 @@
         }
       }
 
-      // 启动安全检查流
-      initMocks();
+      // 执行初始化自旋锁
+      patchRequireJS();
     </script>
   </body>
 </html>
