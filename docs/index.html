@@ -124,6 +124,7 @@
               log('调用了弹窗组件的: show() 方法');
             };
             this.autoImportZipFile = function (files, meta) {
+              console.log('🚀 ~ MockImportFileDialogView ~ files, meta:', files, meta);
               log('核心闭环成功！插件调用了最后的导入方法: autoImportZipFile()');
               log(`[最终成果] 接收到的伪造文件包长度: ${files.length}`);
             };
@@ -170,6 +171,7 @@
           if (event.source === window) return;
 
           const message = event.data;
+          console.log('🚀 ~ startMessageListener ~ message:', event);
           if (!message) return;
 
           log(`捕捉到跨域消息，类型(type): ${message.type || 'undefined'}`);
