@@ -349,7 +349,7 @@
           if (!message) return;
 
           log(`捕捉到跨域消息，类型(type): ${message.type || 'undefined'}`);
-          if (message.type === 'getFiles') {
+          if (message.type === '"getFilesResult"') {
             unzipAndUploadAll(message.data, githubConfig);
           }
 
