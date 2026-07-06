@@ -86,59 +86,69 @@
         }
       }
 
-      // 2. 核心拦截桩配置：全面欺骗 RequireJS 的模块查找机制
-      function patchRequireJS() {
-        if (typeof requirejs !== 'undefined' || typeof define !== 'undefined') {
-          // 🔥 【核心修复 1】：配置 RequireJS，让所有对 application 的请求都重定向到本地桩
-          requirejs.config({
-            baseUrl: '.', // 锚定当前路径
-            map: {
-              '*': {
-                application: 'mock_application',
-                './application': 'mock_application', // 彻底绝杀插件里的形如 ./application 的同步加载报错
-              },
-            },
-          });
-
-          const def = typeof define !== 'undefined' ? define : requirejs.define;
+      // 2. 🔥【核心绝杀】：绕过 RequireJS 机制，直接进行全局函数劫持
+      function hijackRequireJS() {
+        // 检查 RequireJS 变量是否已经挂载到全局 window 上
+        if (typeof requirejs !== 'undefined' || typeof require !== 'undefined') {
           document.getElementById('status').innerText = '等待插件连接...';
-          log('RequireJS 环境配置成功，开始挂载别名拦截桩...');
+          log('🚀 检测到 RequireJS 环境，启动全局函数劫持（Monkey Patch）...');
 
-          // 🔥 【核心修复 2】：使用配置好的别名 'mock_application' 注册伪造对象
-          def('mock_application', [], function () {
-            log("插件成功触发了 requirejs('./application')！正在下发伪装对象...");
-            return {
-              isFirstUse: function () {
-                return true;
-              },
-              hideTour: function () {
-                log('调用了防干扰组件: hideTour()');
-              },
-              getApplicationProfileModel: function () {
-                return {
-                  set: function (obj) {
-                    log('修改设置注入: ' + JSON.stringify(obj));
-                  },
-                };
-              },
-              homeView: {
-                previewView: {
-                  close: function (flag) {
-                    log('调用了视图控制: close(' + flag + ')');
-                  },
+          // 提前准备好我们要喂给插件的伪造对象
+          const mockApplicationObject = {
+            isFirstUse: function () {
+              return true;
+            },
+            hideTour: function () {
+              log('调用了防干扰组件: hideTour()');
+            },
+            getApplicationProfileModel: function () {
+              return {
+                set: function (obj) {
+                  log('修改设置注入: ' + JSON.stringify(obj));
+                },
+              };
+            },
+            homeView: {
+              previewView: {
+                close: function (flag) {
+                  log('调用了视图控制: close(' + flag + ')');
                 },
               },
-            };
-          });
+            },
+          };
+
+          // 保存原生的 requirejs 函数，以防万一
+          const originalRequireJS = window.requirejs || window.require;
+
+          // 核心劫持：重写全局的 requirejs / require
+          const proxyRequire = function (name) {
+            // 只要插件尝试获取 application 或者 ./application，直接把对象塞到它手里！
+            if (typeof name === 'string' && (name === 'application' || name === './application')) {
+              log(`🎯 完美拦截！插件正在同步调用 requirejs('${name}')，已成功下发伪装对象。`);
+              return mockApplicationObject;
+            }
+            // 如果是其他的正常调用，扔回给原生的 requirejs 处理
+            return originalRequireJS.apply(this, arguments);
+          };
+
+          // 把所有的全局引用全部强行替换成我们的代理函数
+          window.requirejs = proxyRequire;
+          window.require = proxyRequire;
+          if (typeof define !== 'undefined') {
+            window.define.amd = window.define.amd || {};
+          }
+
+          log('✅ 全局拦截桩挂载完毕，RequireJS 同步报错已被从底层绝杀。');
 
           // 启动消息事件监听
           startMessageListener();
         } else {
-          setTimeout(patchRequireJS, 30);
+          // 继续自旋直到检测到变量
+          setTimeout(hijackRequireJS, 30);
         }
       }
 
-      // 3. 跨域 postMessage 通信核心逻辑（保持不变）
+      // 3. 跨域 postMessage 通信逻辑（保持稳定）
       function startMessageListener() {
         window.addEventListener('message', function (event) {
           if (event.source === window) return;
@@ -172,7 +182,7 @@
 
             log(`截获知乎问答 ID 列表: ${JSON.stringify(fileIds)}`, true);
 
-            log('正在伪造二进制问答文件流送回插件，触发其后续清理流程...');
+            log('正在伪造二进制问答文件流送回插件，触发其后续流程...');
             const mockFilePack = [
               {
                 filename: `zhihu_answer_intercepted_${fileIds[0]}.txt`,
@@ -199,8 +209,8 @@
         }
       }
 
-      // 执行初始化
-      patchRequireJS();
+      // 执行初始化1
+      hijackRequireJS();
     </script>
   </body>
 </html>
