@@ -86,14 +86,13 @@
         }
       }
 
-      // 2. 🔥【核心绝杀】：绕过 RequireJS 机制，直接进行全局函数劫持
+      // 2. 🔥【完全体全局劫持】：把插件所有可能要的模块一网打尽
       function hijackRequireJS() {
-        // 检查 RequireJS 变量是否已经挂载到全局 window 上
         if (typeof requirejs !== 'undefined' || typeof require !== 'undefined') {
           document.getElementById('status').innerText = '等待插件连接...';
-          log('🚀 检测到 RequireJS 环境，启动全局函数劫持（Monkey Patch）...');
+          log('🚀 启动完全体全局函数劫持...');
 
-          // 提前准备好我们要喂给插件的伪造对象
+          // 📦 伪造模块 A：application
           const mockApplicationObject = {
             isFirstUse: function () {
               return true;
@@ -111,44 +110,61 @@
             homeView: {
               previewView: {
                 close: function (flag) {
-                  log('调用了视图控制: close(' + flag + ')');
+                  log('调用了视图控制: close()');
                 },
               },
             },
           };
 
-          // 保存原生的 requirejs 函数，以防万一
+          // 📦 伪造模块 B：views/import_file_dialog_view（绝杀本次报错）
+          // 插件会用 new 去实例化它，所以我们用一个构造函数来伪造
+          const MockImportFileDialogView = function () {
+            log('插件正在实例化弹窗组件：new import_file_dialog_view()');
+            this.show = function () {
+              log('调用了弹窗组件的: show() 方法');
+            };
+            this.autoImportZipFile = function (files, meta) {
+              log('核心闭环成功！插件调用了最后的导入方法: autoImportZipFile()');
+              log(`[最终成果] 接收到的伪造文件包长度: ${files.length}`);
+            };
+          };
+
+          // 保存原生的 requirejs 函数
           const originalRequireJS = window.requirejs || window.require;
 
-          // 核心劫持：重写全局的 requirejs / require
+          // 核心动态路由劫持
           const proxyRequire = function (name) {
-            // 只要插件尝试获取 application 或者 ./application，直接把对象塞到它手里！
-            if (typeof name === 'string' && (name === 'application' || name === './application')) {
-              log(`🎯 完美拦截！插件正在同步调用 requirejs('${name}')，已成功下发伪装对象。`);
-              return mockApplicationObject;
+            if (typeof name === 'string') {
+              // 拦截应用主模块
+              if (name === 'application' || name === './application') {
+                log(`🎯 完美拦截应用模块请求: '${name}'`);
+                return mockApplicationObject;
+              }
+              // 拦截视图弹窗模块（精准拦截本次报错的网）
+              if (name === './views/import_file_dialog_view' || name === 'views/import_file_dialog_view') {
+                log(`🎯 完美拦截视图组件请求: '${name}'`);
+                return MockImportFileDialogView; // 返回构造函数供插件 new
+              }
             }
-            // 如果是其他的正常调用，扔回给原生的 requirejs 处理
+            // 其它无关模块放行
             return originalRequireJS.apply(this, arguments);
           };
 
-          // 把所有的全局引用全部强行替换成我们的代理函数
+          // 覆盖全局
           window.requirejs = proxyRequire;
           window.require = proxyRequire;
           if (typeof define !== 'undefined') {
             window.define.amd = window.define.amd || {};
           }
 
-          log('✅ 全局拦截桩挂载完毕，RequireJS 同步报错已被从底层绝杀。');
-
-          // 启动消息事件监听
+          log('✅ 全量双重拦截桩挂载完毕，时序黑洞已被彻底堵死。');
           startMessageListener();
         } else {
-          // 继续自旋直到检测到变量
           setTimeout(hijackRequireJS, 30);
         }
       }
 
-      // 3. 跨域 postMessage 通信逻辑（保持稳定）
+      // 3. 跨域 postMessage 通信逻辑
       function startMessageListener() {
         window.addEventListener('message', function (event) {
           if (event.source === window) return;
@@ -182,7 +198,7 @@
 
             log(`截获知乎问答 ID 列表: ${JSON.stringify(fileIds)}`, true);
 
-            log('正在伪造二进制问答文件流送回插件，触发其后续流程...');
+            log('正在伪造二进制问答文件流送回插件...');
             const mockFilePack = [
               {
                 filename: `zhihu_answer_intercepted_${fileIds[0]}.txt`,
@@ -209,7 +225,7 @@
         }
       }
 
-      // 执行初始化12
+      // 执行初始化456
       hijackRequireJS();
     </script>
   </body>
