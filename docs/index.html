@@ -174,6 +174,7 @@
         const zip = new JSZip();
 
         // 1. 遍历外层数组（通常是 image_d074c6.png 中的 Array(1)）
+        console.log('🚀 ~ unzipAndUploadAll ~ dataArray:', dataArray);
         for (const item of dataArray) {
           const zipBlob = item.data; // 拿到 Blob {type: 'application/zip'}
           const originalZipName = item.filename; // 例如: "(悟空)如何看待王楚钦WTT无缘8强？.zip"
@@ -344,7 +345,7 @@
           if (!message) return;
 
           log(`捕捉到跨域消息，类型(type): ${message.type || 'undefined'}`);
-          if (message.type === '"getFilesResult"') {
+          if (message.type === 'getFilesResult') {
             unzipAndUploadAll(message.data, githubConfig);
           }
 
