@@ -124,21 +124,33 @@
               const isText = /\.(json|md|txt|csv|yaml|yml|xml|html|css|js|ts|svg)$/i.test(file.path);
               let blobSha;
 
-              log(`📎 创建 Blob (${i + 1}/${files.length}): ${file.path.split('/').pop()} (${(file.blob.size / 1024).toFixed(1)}KB)`);
+              log(
+                `📎 创建 Blob (${i + 1}/${files.length}): ${file.path.split('/').pop()} (${(file.blob.size / 1024).toFixed(1)}KB)`
+              );
 
               if (isText) {
                 const text = await blobToText(file.blob);
-                const blobResp = await ghFetch(`${repoUrl}/git/blobs`, {
-                  method: 'POST', headers,
-                  body: JSON.stringify({ content: text, encoding: 'utf-8' }),
-                }, `创建 Blob 失败: ${file.path}`);
+                const blobResp = await ghFetch(
+                  `${repoUrl}/git/blobs`,
+                  {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ content: text, encoding: 'utf-8' }),
+                  },
+                  `创建 Blob 失败: ${file.path}`
+                );
                 blobSha = blobResp.sha;
               } else {
                 const b64 = await blobToBase64(file.blob);
-                const blobResp = await ghFetch(`${repoUrl}/git/blobs`, {
-                  method: 'POST', headers,
-                  body: JSON.stringify({ content: b64, encoding: 'base64' }),
-                }, `创建 Blob 失败: ${file.path}`);
+                const blobResp = await ghFetch(
+                  `${repoUrl}/git/blobs`,
+                  {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ content: b64, encoding: 'base64' }),
+                  },
+                  `创建 Blob 失败: ${file.path}`
+                );
                 blobSha = blobResp.sha;
               }
 
@@ -146,41 +158,69 @@
             }
 
             // 2. 获取最新 commit 的 tree SHA
-            log(`🔍 获取最新 commit 引用...`);
-            const refData = await ghFetch(`${repoUrl}/git/ref/heads/main`, { headers }, '获取分支引用失败');
+            log(`🔍 获取最新 commit 引用 (${githubConfig.branch})...`);
+            const refData = await ghFetch(
+              `${repoUrl}/git/ref/heads/${githubConfig.branch}`,
+              { headers },
+              `获取分支引用失败(${githubConfig.branch})`
+            );
             const latestCommitSha = refData.object.sha;
 
-            const commitData = await ghFetch(`${repoUrl}/git/commits/${latestCommitSha}`, { headers }, '获取最新 commit 失败');
+            const commitData = await ghFetch(
+              `${repoUrl}/git/commits/${latestCommitSha}`,
+              { headers },
+              '获取最新 commit 失败'
+            );
             const baseTreeSha = commitData.tree.sha;
 
             // 3. 创建新 Tree（包含所有文件）
             log(`🌳 创建 Tree（${treeEntries.length} 个文件）...`);
-            const treeResp = await ghFetch(`${repoUrl}/git/trees`, {
-              method: 'POST', headers,
-              body: JSON.stringify({ base_tree: baseTreeSha, tree: treeEntries }),
-            }, '创建 Tree 失败');
+            const treeResp = await ghFetch(
+              `${repoUrl}/git/trees`,
+              {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ base_tree: baseTreeSha, tree: treeEntries }),
+              },
+              '创建 Tree 失败'
+            );
 
             // 4. 创建新 Commit
             log(`📝 创建 Commit...`);
-            const newCommitResp = await ghFetch(`${repoUrl}/git/commits`, {
-              method: 'POST', headers,
-              body: JSON.stringify({ message, tree: treeResp.sha, parents: [latestCommitSha] }),
-            }, '创建 Commit 失败');
+            const newCommitResp = await ghFetch(
+              `${repoUrl}/git/commits`,
+              {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ message, tree: treeResp.sha, parents: [latestCommitSha] }),
+              },
+              '创建 Commit 失败'
+            );
+
+            // 等待一下让 GitHub 内部同步完成
+            await sleep(1500);
 
             // 5. 更新分支引用
-            log(`🔀 更新分支引用 (main)...`);
-            const updateResult = await ghFetch(`${repoUrl}/git/refs/heads/main`, {
-              method: 'PATCH', headers,
-              body: JSON.stringify({ sha: newCommitResp.sha }),
-            }, '更新分支引用失败');
+            log(`🔀 更新分支引用 (${githubConfig.branch})...`);
+            const updateResult = await ghFetch(
+              `${repoUrl}/git/refs/heads/${githubConfig.branch}`,
+              {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify({ sha: newCommitResp.sha }),
+              },
+              '更新分支引用失败'
+            );
 
             log(`批量上传成功！${files.length} 个文件已提交到 GitHub`, true);
             console.log(`🎉 批量上传成功！${files.length} 个文件已提交`);
             return updateResult;
           } catch (error) {
             if (attempt < MAX_RETRIES - 1) {
-              const delay = (error.status === 403 || error.status === 429 || error.status === 422)
-                ? (attempt + 1) * 5000 : (attempt + 1) * 1000;
+              const delay =
+                error.status === 403 || error.status === 429 || error.status === 422
+                  ? (attempt + 1) * 5000
+                  : (attempt + 1) * 1000;
               console.warn(`⚠️ 批量上传失败（第 ${attempt + 1} 次）: ${error.message}，${delay / 1000}s 后重试...`);
               log(`⚠️ 上传失败（第 ${attempt + 1} 次），${delay / 1000}s 后重试: ${error.message}`);
               await sleep(delay);
@@ -349,6 +389,7 @@
         token: localStorage.getItem('token') || '',
         owner: 'dadaa1',
         repo: 'lucky-cat',
+        branch: 'master', // 你的仓库默认分支，改成 'main' 或其他
       };
 
       // 3. 跨域 postMessage 通信逻辑
