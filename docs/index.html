@@ -65,104 +65,136 @@
     </div>
     <script>
       /**
-       * 纯前端：通过 GitHub Token 将文件上传/同步到指定仓库
-       * @param {string} token - 你的 GitHub Personal Access Token
-       * @param {string} owner - 你的 GitHub 用户名
-       * @param {string} repo - 你的仓库名
-       * @param {string} path - 存放在仓库中的完整路径和文件名 (例如: 'data/zhihu_ans.txt')
-       * @param {Blob|File|string} fileContent - 文件内容、Blob、File对象或字符串
-       * @param {string} message - 提交时的 Commit 信息
+       * 纯前端批量上传：通过 GitHub Git Data API 将多个文件一次性提交
+       * 路径放在 JSON body 里（不是 URL 里），完美支持中文路径
        */
-      async function uploadFileToGithub({
-        token,
-        owner,
-        repo,
-        path,
-        fileContent,
-        message = 'sync: auto upload from web client',
-      }) {
-        // 1. 核心步骤：将各种类型的文件内容，高效转换为 GitHub API 要求的 Base64 编码
-        let base64Content = '';
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-        if (fileContent instanceof Blob || fileContent instanceof File) {
-          // 如果是 File 或 Blob，利用 FileReader 异步读取为 DataURL，然后裁切出 Base64 纯文本
-          base64Content = await new Promise((resolve, reject) => {
+      async function batchUploadToGithub({ token, owner, repo, files, message }) {
+        // files: Array<{ path: string, blob: Blob }>
+        const headers = {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+        };
+        const repoUrl = `https://api.github.com/repos/${owner}/${repo}`;
+
+        async function ghFetch(url, options, label) {
+          const resp = await fetch(url, options);
+          if (!resp.ok) {
+            let detail = '';
+            try {
+              const errJson = await resp.json();
+              detail = JSON.stringify(errJson);
+            } catch (_) {
+              detail = await resp.text();
+            }
+            const err = new Error(`${label} [${resp.status}]: ${detail}`);
+            err.status = resp.status;
+            throw err;
+          }
+          return resp.json();
+        }
+
+        // 辅助：Blob → base64
+        async function blobToBase64(blob) {
+          return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => {
-              const base64 = reader.result.split(',')[1];
-              resolve(base64);
+              const idx = reader.result.indexOf(',');
+              resolve(idx >= 0 ? reader.result.substring(idx + 1) : '');
             };
             reader.onerror = reject;
-            reader.readAsDataURL(fileContent);
+            reader.readAsDataURL(blob);
           });
-        } else if (typeof fileContent === 'string') {
-          // 如果是纯文本，直接编码。用 encodeURIComponent 规避中文及特殊字符乱码问题
-          base64Content = btoa(unescape(encodeURIComponent(fileContent)));
-        } else {
-          // 如果传进来的是标准的 JSON 对象，先转成字符串再编码
-          const jsonStr = JSON.stringify(fileContent, null, 2);
-          base64Content = btoa(unescape(encodeURIComponent(jsonStr)));
         }
 
-        // 2. 构造 GitHub 针对单文件创建与更新的 REST API 终端地址
-        const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-
-        // 3. 防坑处理：由于 GitHub 规定如果目标路径已有同名文件，必须传入该文件的 sha 才能覆盖。
-        // 我们先发送一个静默的 GET 请求检测文件是否存在。
-        let sha = null;
-        try {
-          const checkResponse = await fetch(url, {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github+json',
-            },
-          });
-          if (checkResponse.ok) {
-            const fileInfo = await checkResponse.json();
-            sha = fileInfo.sha; // 成功拿到已有文件的唯一哈希标识
-          }
-        } catch (e) {
-          console.log('该路径下暂无同名文件，将直接执行创建流程。');
+        // 辅助：Blob → 文本内容（用于 UTF-8 编码）
+        async function blobToText(blob) {
+          return blob.text();
         }
 
-        // 4. 构造最终上传的 Payload 体
-        const requestBody = {
-          message: message,
-          content: base64Content,
-        };
-        if (sha) requestBody.sha = sha; // 如果文件已存在，带上 sha 就会自动变成“覆盖更新”操作
+        const MAX_RETRIES = 5;
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+          try {
+            // 1. 为每个文件创建 Blob
+            const treeEntries = [];
+            for (let i = 0; i < files.length; i++) {
+              const file = files[i];
+              const isText = /\.(json|md|txt|csv|yaml|yml|xml|html|css|js|ts|svg)$/i.test(file.path);
+              let blobSha;
 
-        // 5. 发起 PUT 请求将数据无脑推送到你的 GitHub 仓库
-        try {
-          const response = await fetch(url, {
-            method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github+json',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody),
-          });
+              log(`📎 创建 Blob (${i + 1}/${files.length}): ${file.path.split('/').pop()} (${(file.blob.size / 1024).toFixed(1)}KB)`);
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`GitHub 拒绝了请求: ${errorData.message}`);
+              if (isText) {
+                const text = await blobToText(file.blob);
+                const blobResp = await ghFetch(`${repoUrl}/git/blobs`, {
+                  method: 'POST', headers,
+                  body: JSON.stringify({ content: text, encoding: 'utf-8' }),
+                }, `创建 Blob 失败: ${file.path}`);
+                blobSha = blobResp.sha;
+              } else {
+                const b64 = await blobToBase64(file.blob);
+                const blobResp = await ghFetch(`${repoUrl}/git/blobs`, {
+                  method: 'POST', headers,
+                  body: JSON.stringify({ content: b64, encoding: 'base64' }),
+                }, `创建 Blob 失败: ${file.path}`);
+                blobSha = blobResp.sha;
+              }
+
+              treeEntries.push({ path: file.path, mode: '100644', type: 'blob', sha: blobSha });
+            }
+
+            // 2. 获取最新 commit 的 tree SHA
+            log(`🔍 获取最新 commit 引用...`);
+            const refData = await ghFetch(`${repoUrl}/git/ref/heads/main`, { headers }, '获取分支引用失败');
+            const latestCommitSha = refData.object.sha;
+
+            const commitData = await ghFetch(`${repoUrl}/git/commits/${latestCommitSha}`, { headers }, '获取最新 commit 失败');
+            const baseTreeSha = commitData.tree.sha;
+
+            // 3. 创建新 Tree（包含所有文件）
+            log(`🌳 创建 Tree（${treeEntries.length} 个文件）...`);
+            const treeResp = await ghFetch(`${repoUrl}/git/trees`, {
+              method: 'POST', headers,
+              body: JSON.stringify({ base_tree: baseTreeSha, tree: treeEntries }),
+            }, '创建 Tree 失败');
+
+            // 4. 创建新 Commit
+            log(`📝 创建 Commit...`);
+            const newCommitResp = await ghFetch(`${repoUrl}/git/commits`, {
+              method: 'POST', headers,
+              body: JSON.stringify({ message, tree: treeResp.sha, parents: [latestCommitSha] }),
+            }, '创建 Commit 失败');
+
+            // 5. 更新分支引用
+            log(`🔀 更新分支引用 (main)...`);
+            const updateResult = await ghFetch(`${repoUrl}/git/refs/heads/main`, {
+              method: 'PATCH', headers,
+              body: JSON.stringify({ sha: newCommitResp.sha }),
+            }, '更新分支引用失败');
+
+            log(`批量上传成功！${files.length} 个文件已提交到 GitHub`, true);
+            console.log(`🎉 批量上传成功！${files.length} 个文件已提交`);
+            return updateResult;
+          } catch (error) {
+            if (attempt < MAX_RETRIES - 1) {
+              const delay = (error.status === 403 || error.status === 429 || error.status === 422)
+                ? (attempt + 1) * 5000 : (attempt + 1) * 1000;
+              console.warn(`⚠️ 批量上传失败（第 ${attempt + 1} 次）: ${error.message}，${delay / 1000}s 后重试...`);
+              log(`⚠️ 上传失败（第 ${attempt + 1} 次），${delay / 1000}s 后重试: ${error.message}`);
+              await sleep(delay);
+              continue;
+            }
+            console.error('❌ 批量上传最终失败（已重试 ' + MAX_RETRIES + ' 次）:', error);
+            log(`❌ 批量上传最终失败: ${error.message}`);
+            throw error;
           }
-
-          const result = await response.json();
-          console.log('🎉 纯前端同步成功！文件线上地址为:', result.content.html_url);
-          return result; // 返回包含文件信息的结果供后续 UI 渲染
-        } catch (error) {
-          console.error('❌ 纯前端推送到 GitHub 失败:', error);
-          throw error;
         }
       }
 
       /**
-       * 解压接收到的 zip 数组，并遍历其中的所有文件分别上传到 GitHub
-       * @param {Array} dataArray - 即图片中你拿到的 data.data 数组（包含 zip Blob 的那个）
-       * @param {Object} githubConfig - GitHub 仓库配置信息 { token, owner, repo }
+       * 解压接收到的 zip 数组，收集所有文件后一次性批量上传
        */
       async function unzipAndUploadAll(dataArray, githubConfig) {
         if (!dataArray || dataArray.length === 0) {
@@ -170,65 +202,49 @@
           return;
         }
 
-        // 初始化 JSZip 实例
         const zip = new JSZip();
 
-        // 1. 遍历外层数组（通常是 image_d074c6.png 中的 Array(1)）
-        console.log('🚀 ~ unzipAndUploadAll ~ dataArray:', dataArray);
         for (const item of dataArray) {
-          const zipBlob = item.data; // 拿到 Blob {type: 'application/zip'}
-          const originalZipName = item.filename; // 例如: "(悟空)如何看待王楚钦WTT无缘8强？.zip"
-
-          // 去掉原本文件名的 .zip 后缀，作为 GitHub 上的归档目录名
+          const zipBlob = item.data;
+          const originalZipName = item.filename;
           const folderName = originalZipName.replace('.zip', '').trim();
 
-          console.log(`📦 开始解析压缩包: ${originalZipName}...`);
+          log(`📦 开始解析压缩包: ${originalZipName}`);
 
           try {
-            // 2. 让 JSZip 加载并解析这个二进制 Blob
             const unzippedData = await zip.loadAsync(zipBlob);
 
-            // 存储该压缩包内所有待上传的任务
-            const uploadPromises = [];
-
-            // 3. 遍历 zip 包里的每一个文件（根据文件多少动态上传）
-            // zip.forEach 的回调里：relativePath 是内部相对路径，zipEntry 是文件对象
+            // 收集所有文件
+            const files = [];
+            const entries = [];
             unzippedData.forEach(function (relativePath, zipEntry) {
-              // 排除文件夹本身（如果是纯文件夹结构，不需要单独当成文件上传）
-              if (zipEntry.dir) return;
-
-              console.log(`🔍 发现压缩包内文件: ${relativePath}`);
-
-              // 4. 将解压出来的单文件转为 Blob（或者纯文本）
-              // 推荐转成 blob，因为这样可以完美支持图片、Markdown 文本、JSON 等各种格式
-              const uploadTask = zipEntry.async('blob').then(async (fileBlob) => {
-                // 构造它在 GitHub 仓库里的存储路径 (例如: data/如何看待.../index.md)
-                const githubPath = `data/${folderName}/${relativePath}`;
-
-                console.log(`🚀 正在向 GitHub 推送子文件: ${githubPath}`);
-
-                // 调用之前写好的纯前端上传方法
-                return uploadFileToGithub({
-                  token: githubConfig.token,
-                  owner: githubConfig.owner,
-                  repo: githubConfig.repo,
-                  path: githubPath,
-                  fileContent: fileBlob,
-                  message: `auto: extract and upload ${relativePath} from ${originalZipName}`,
-                });
-              });
-
-              // 将该上传任务塞入队列
-              uploadPromises.push(uploadTask);
+              if (!zipEntry.dir) entries.push({ relativePath, zipEntry });
             });
 
-            // 5. 根据文件多少，并发执行所有上传请求，直到它们全部完成
-            console.log(`📊 压缩包解析完毕，内部共计 ${uploadPromises.length} 个文件，开始批量上传...`);
+            log(`📊 压缩包内共 ${entries.length} 个文件，正在读取...`);
 
-            const results = await Promise.all(uploadPromises);
-            console.log(`🎉 压缩包 [${originalZipName}] 内的所有文件已全部安全送达 GitHub！`, results);
+            for (let i = 0; i < entries.length; i++) {
+              const { relativePath, zipEntry } = entries[i];
+              const blob = await zipEntry.async('blob');
+              const githubPath = `data/${folderName}/${relativePath}`;
+              files.push({ path: githubPath, blob });
+              log(`  📄 读取文件 (${i + 1}/${entries.length}): ${relativePath} (${(blob.size / 1024).toFixed(1)}KB)`);
+            }
+
+            // 一次性批量上传所有文件
+            log(`🚀 开始批量上传 ${files.length} 个文件到 GitHub...`);
+            await batchUploadToGithub({
+              token: githubConfig.token,
+              owner: githubConfig.owner,
+              repo: githubConfig.repo,
+              files,
+              message: `auto: upload ${files.length} files from ${originalZipName}`,
+            });
+
+            log(`🎉 压缩包 [${originalZipName}] 全部上传完成！`, true);
           } catch (error) {
-            console.error(`❌ 解析或上传压缩包 [${originalZipName}] 失败:`, error);
+            log(`❌ 处理压缩包失败: ${error.message}`);
+            console.error(`❌ 处理压缩包 [${originalZipName}] 失败:`, error);
           }
         }
       }
