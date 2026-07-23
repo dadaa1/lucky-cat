@@ -261,6 +261,7 @@
               if (!zipEntry.dir) entries.push({ relativePath, zipEntry });
             });
 
+            console.log('🚀 ~ unzipAndUploadAll ~ entries:', entries);
             log(`📊 压缩包内共 ${entries.length} 个文件，正在读取...`);
 
             for (let i = 0; i < entries.length; i++) {
