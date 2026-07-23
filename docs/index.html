@@ -266,6 +266,7 @@
 
             for (let i = 0; i < entries.length; i++) {
               const { relativePath, zipEntry } = entries[i];
+              if (relativePath === 'readme.md') continue;
               const blob = await zipEntry.async('blob');
               const githubPath = `data/${folderName}/${relativePath}`;
               files.push({ path: githubPath, blob });
