@@ -1,0 +1,2 @@
+# 部署时由 CI 生成（copy data -> docs/data），不要提交进仓库
+docs/data/

@@ -44,6 +44,11 @@ jobs:
           node-version: 22
       - name: Build data index
         run: node scripts/build-data-index.mjs
+      - name: Copy data into docs for Pages
+        # GitHub Pages 只发布 docs/ 作为站点根目录，showcase.html 用相对路径
+        # data/ 读取文章，因此部署前把 data/ 复制进 docs/data/，
+        # 这样线上 /lucky-cat/data/... 才能正确加载（../data/ 在 Pages 下会 404）。
+        run: rm -rf docs/data && cp -r data docs/data
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
