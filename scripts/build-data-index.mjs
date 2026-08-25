@@ -65,6 +65,17 @@ const folders = (await readdir(dataDir, { withFileTypes: true }))
   .map((entry) => entry.name)
   .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
 
+// 把 updateDate / createDate 统一转成可比较的数字（毫秒时间戳）。
+// 支持：数字时间戳、数字字符串、以及 "YYYY-M-D H:M:S" 这类日期字符串；缺失或非法则视为 0。
+const toTime = (v) => {
+  if (v === '' || v == null) return 0;
+  if (typeof v === 'number') return v;
+  const n = Number(v);
+  if (!Number.isNaN(n)) return n;
+  const t = Date.parse(String(v).replace(' ', 'T'));
+  return Number.isNaN(t) ? 0 : t;
+};
+
 const records = [];
 
 for (const folder of folders) {
@@ -110,6 +121,9 @@ for (const folder of folders) {
     summary,
   });
 }
+
+// 按 updateDate 从新到旧（降序）排序；缺失 updateDate 时回退到 createDate
+records.sort((a, b) => toTime(b.updateDate || b.createDate) - toTime(a.updateDate || a.createDate));
 
 await writeFile(outFile, `${JSON.stringify(records, null, 2)}\n`);
 console.log(`Wrote ${records.length} records to ${path.relative(root, outFile)}`);
