@@ -33,7 +33,7 @@ const extractFrontMatter = (markdown) => {
           .replace(/^['"]|['"]$/g, '');
         return [key, value];
       })
-      .filter(Boolean),
+      .filter(Boolean)
   );
 };
 
@@ -111,7 +111,7 @@ for (const folder of folders) {
     category: frontMatter.category || '',
     slug: meta.slug || frontMatter.slug || '',
     createDate: frontMatter.createDate || '',
-    updateDate: meta.updateDate || '',
+    updateDate: meta.updateDate || '1784169559400',
     markdown: markdownFile,
     cover,
     images,
