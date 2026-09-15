@@ -951,6 +951,10 @@
             .slice(0, 10)
             .map((image) => `<img src="${itemUrl(record, image)}" alt="" loading="lazy" />`)
             .join('');
+          // 没有图片时，整个「图片速览」模块不展示
+          const sidePanel = gallery
+            ? `<aside class="side-panel"><h3>图片速览</h3><div class="gallery">${gallery}</div></aside>`
+            : '';
 
           reader.innerHTML = `
             <header class="hero">
@@ -967,10 +971,7 @@
             </header>
             <div class="reader-body">
               <div class="article">${renderMarkdown(markdown, record)}</div>
-              <aside class="side-panel">
-                <h3>图片速览</h3>
-                <div class="gallery">${gallery || '<div class="empty">没有图片</div>'}</div>
-              </aside>
+              ${sidePanel}
             </div>
             ${commentsHtml}`;
           scrollTarget()?.scrollTo({ top: 0, behavior: 'auto' });
