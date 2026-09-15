@@ -288,6 +288,11 @@
         padding: 28px;
       }
 
+      /* 没有图片速览时，塌缩为单列，正文占满整行 */
+      .reader-body.no-side {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
       .article {
         min-width: 0;
         color: #2e2a26;
@@ -955,6 +960,7 @@
           const sidePanel = gallery
             ? `<aside class="side-panel"><h3>图片速览</h3><div class="gallery">${gallery}</div></aside>`
             : '';
+          const readerBodyClass = sidePanel ? 'reader-body' : 'reader-body no-side';
 
           reader.innerHTML = `
             <header class="hero">
@@ -969,7 +975,7 @@
                 ${record.slug ? `<p><a href="${record.slug}" target="_blank" rel="noreferrer">查看原文</a></p>` : ''}
               </div>
             </header>
-            <div class="reader-body">
+            <div class="${readerBodyClass}">
               <div class="article">${renderMarkdown(markdown, record)}</div>
               ${sidePanel}
             </div>
